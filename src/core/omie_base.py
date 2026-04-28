@@ -52,8 +52,7 @@ class OmieBase:
         base = {
             "pagina": page,
             "registros_por_pagina": 100,
-            "apenas_importado_api": "N",
-            "exibir_caracteristicas": "S"
+            "apenas_importado_api": "N"            
         }
 
         base.update(self.extra_params)
