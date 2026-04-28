@@ -4,6 +4,7 @@ from datetime import datetime
 
 from src.pipelines.collect_clientes import ClientesPipeline
 from src.pipelines.collect_produtos import ProdutosPipeline
+from src.pipelines.extract import load_json_cliente, load_json_produtos
 
 def salvar_json(dados, nome):
     data_hoje = datetime.now().strftime("%Y-%m-%d")
@@ -21,8 +22,10 @@ if __name__ == "__main__":
     salvar_json(clientes, "clientes")
     len_clientes = len(clientes)
     print(f"Total de clientes coletados: {len_clientes}")
+    load_json_cliente(clientes)
 
     produtos = ProdutosPipeline().run()
     salvar_json(produtos, "produtos")
     len_produtos = len(produtos)
     print(f"Total de produtos coletados: {len_produtos}")   
+    load_json_produtos(produtos)

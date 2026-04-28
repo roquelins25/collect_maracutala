@@ -1,5 +1,6 @@
 import requests
 import logging
+from tqdm import tqdm
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from src.config import Settings
@@ -69,22 +70,25 @@ class OmieBase:
         logging.info(f"Iniciando coleta de dados para {self.call}")
         payload = self._build_payload(1)
 
-        logging.debug(f"Payload inicial: {payload}")
         first = self._make_request(payload)
-
-        logging.debug(f"Resposta da primeira página: {first}")
         total_paginas = first.get("total_de_paginas", 1)
-        logging.info(f"Total de páginas a coletar: {total_paginas}")
 
         all_data = []
 
-        for page in range(1, total_paginas + 1):
-            logging.info(f"Coletando página {page} de {total_paginas}")
-            payload["param"][0]["pagina"] = page
-            data = self._make_request(payload)
+        pbar = tqdm(range(1, total_paginas + 1), desc="Coletando páginas")
 
+        for page in pbar:
+            payload["param"][0]["pagina"] = page
+
+            data = self._make_request(payload)
             registros = data.get(self.response_key, [])
+
             all_data.extend(registros)
-            logging.info(f"Página {page} coletada com {len(registros)} registros")
+
+            # atualiza texto da barra
+            pbar.set_postfix({
+                "pagina": page,
+                "registros": len(registros)
+            })
 
         return all_data
