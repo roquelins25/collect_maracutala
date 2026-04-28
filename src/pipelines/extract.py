@@ -82,3 +82,24 @@ def load_json_produtos(data):
     save_parquet(df, 'produtos.parquet')
     logging.info("Dados de produtos processados e salvos em parquet")
     return df
+
+def load_json_vendedores(data):
+    vendedores = pd.DataFrame(data)
+    logging.info("Processando dados de vendedores")
+
+    columns_vendedores = [
+        'codInt',
+        'codigo',
+        'comissao',
+        'email',
+        'fatura_pedido',
+        'inativo',
+        "nome",
+        "visualiza_pedido",
+    ]
+
+    df = vendedores[[col for col in columns_vendedores if col in vendedores.columns]]
+
+    save_parquet(df, 'vendedores.parquet')
+    logging.info("Dados de vendedores processados e salvos em parquet")
+    return df

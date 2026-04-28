@@ -5,7 +5,8 @@ class ClientesPipeline:
         collector = OmieBase(
             call="ListarClientes",
             endpoint="geral/clientes/",
-            response_key="clientes_cadastro"
+            response_key="clientes_cadastro",
+            extra_params={"exibir_caracteristicas": "S"}
         )
 
         return collector.coletar_dados()
