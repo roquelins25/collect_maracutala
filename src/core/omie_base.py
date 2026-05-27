@@ -64,27 +64,35 @@ class OmieBase:
             "app_secret": self.app_secret,
             "param": [base]
         }
-
     def coletar_dados(self):
+
         logging.info(f"Iniciando coleta de dados para {self.call}")
+
         payload = self._build_payload(1)
 
         first = self._make_request(payload)
+
         total_paginas = first.get("total_de_paginas", 1)
 
-        all_data = []
+        logging.info(f"Total de páginas a coletar: {total_paginas}")
 
-        pbar = tqdm(range(1, total_paginas + 1), desc="Coletando páginas")
+        all_data = first.get(self.response_key, [])
+
+        pbar = tqdm(
+            range(2, total_paginas + 1),
+            desc="Coletando páginas"
+        )
 
         for page in pbar:
+
             payload["param"][0]["pagina"] = page
 
             data = self._make_request(payload)
+
             registros = data.get(self.response_key, [])
 
             all_data.extend(registros)
 
-            # atualiza texto da barra
             pbar.set_postfix({
                 "pagina": page,
                 "registros": len(registros)
