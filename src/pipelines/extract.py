@@ -1,105 +1,57 @@
-# %% 
-import json
-import pandas as pd
-import os
-import logging
-from pathlib import Path
+from src.core.omie_base import OmieBase
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+class ClientesPipeline:
+    def run(self):
+        collector = OmieBase(
+            call="ListarClientes",
+            endpoint="geral/clientes/",
+            response_key="clientes_cadastro",
+            extra_params={"exibir_caracteristicas": "S",
+                          "apenas_importado_api": "N"}
+        )
 
-# %%
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-print(f"Diretório base: {BASE_DIR}")
-# %%
-def save_parquet(df, file_name):
-    path = BASE_DIR / "data" / "parquet" / "bronze"
-    path.mkdir(parents=True, exist_ok=True)
+        return collector.coletar_dados()
+    
+class PedidosPipeline:
+    def run(self, data_inicio=None, data_fim=None):
+        if not data_inicio or not data_fim:
+            raise ValueError("Informe data_inicio e data_fim")
+        
+        print(f"Coletando pedidos de {data_inicio} a {data_fim}...")
 
-    file_path = path / file_name
+        collector = OmieBase(
+            call="ListarPedidos",
+            endpoint="produtos/pedido/",
+            response_key="pedido_venda_produto",
+            extra_params={
+                "data_previsao_de": data_inicio,
+                "data_previsao_ate": data_fim
+            }
+        )
 
-    df.to_parquet(file_path, index=False)
+        return collector.coletar_dados()
 
-    logging.info(f"Arquivo salvo em: {file_path}")
-# %%
-def load_json_cliente(data):
-    logging.info("Processando dados de clientes")
-    df = pd.DataFrame(data)
+class ProdutosPipeline:
+    def run(self):
+        collector = OmieBase(
+            call="ListarProdutos",
+            endpoint="geral/produtos/",
+            response_key="produto_servico_cadastro",
+            extra_params={"exibir_caracteristicas": "S",
+                          "apenas_importado_api": "N",
+                          "filtrar_apenas_omiepdv": "N"}
+        )
 
-    columns = [
-        'codigo_cliente_integracao', 
-        'codigo_cliente_omie',
-        'nome_fantasia', 
-        'pessoa_fisica', 
-        'razao_social',
-        'bairro', 
-        'estado',
-        'cep', 
-        'cidade',
-        'cnpj_cpf', 
-        'complemento',
-        'inativo', 
-        'inscricao_estadual',
-        'inscricao_municipal', 
-        'caracteristicas', 
-        'tipo_atividade'
-        ]
+        return collector.coletar_dados()
+    
+class VendedoresPipeline:
+    def run(self):
+        collector = OmieBase(
+            call="ListarVendedores",
+            endpoint="geral/vendedores/",
+            response_key="cadastro",
+            extra_params={"apenas_importado_api": "N"}
+        )
 
-    df = df[[col for col in columns if col in df.columns]]
-
-    save_parquet(df, 'clientes.parquet')
-    logging.info("Dados de clientes processados e salvos em parquet")
-    return df
-
-# %%
-def load_json_produtos(data):
-    produtos = pd.DataFrame(data)
-    logging.info("Processando dados de produtos")
-
-    columns_produtos = [
-            'codigo_produto', 
-            'codigo_produto_integracao',
-            'descricao', 
-            'bloqueado',
-            'bloquear_exclusao', 
-            'caracteristicas', 
-            'cest', 
-            'cfop',
-            'class_trib',
-            'codInt_familia', 
-            'codigo',
-            'codigo_familia',
-            'ean',
-            'inativo', 
-            'marca', 
-            'modelo', 
-            'tipoItem',
-            'unidade', 
-            'valor_unitario'
-            ]
-
-    df = produtos[[col for col in columns_produtos if col in produtos.columns]]
-
-    save_parquet(df, 'produtos.parquet')
-    logging.info("Dados de produtos processados e salvos em parquet")
-    return df
-
-def load_json_vendedores(data):
-    vendedores = pd.DataFrame(data)
-    logging.info("Processando dados de vendedores")
-
-    columns_vendedores = [
-        'codInt',
-        'codigo',
-        'comissao',
-        'email',
-        'fatura_pedido',
-        'inativo',
-        "nome",
-        "visualiza_pedido",
-    ]
-
-    df = vendedores[[col for col in columns_vendedores if col in vendedores.columns]]
-
-    save_parquet(df, 'vendedores.parquet')
-    logging.info("Dados de vendedores processados e salvos em parquet")
-    return df
+        return collector.coletar_dados()
+    

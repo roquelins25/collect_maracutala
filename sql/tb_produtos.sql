@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS tb_produtos (
+    codigo_produto              BIGINT  PRIMARY KEY,
+    codigo_produto_integracao   VARCHAR(100),
+    descricao                   VARCHAR(500),
+    bloqueado                   VARCHAR(10),
+    bloquear_exclusao           VARCHAR(10),
+    cest                        VARCHAR(20),
+    cfop                        VARCHAR(10),
+    class_trib                  VARCHAR(50),
+    codigo                      VARCHAR(50),
+    codigo_familia              BIGINT,
+    descricao_familia           VARCHAR(200),
+    ean                         VARCHAR(20),
+    inativo                     VARCHAR(10),
+    marca                       VARCHAR(100),
+    modelo                      VARCHAR(100),
+    sabor                       VARCHAR(100),
+    tipo_item                   VARCHAR(50),
+    unidade                     VARCHAR(20),
+    valor_unitario              NUMERIC(15, 4)
+);
