@@ -23,25 +23,38 @@ logger = logging.getLogger(__name__)
 _SQL_DIR = Path(__file__).resolve().parent.parent.parent / "sql"
 
 # ── Chave primária de cada tabela dimensão ────────────────────────────────
+# Atenção: o nome aqui deve ser o nome APÓS aplicar _COLUMN_RENAME
+# tb_pedidos NÃO tem PK — usa DELETE por datprev + INSERT (padrão fatos)
 _TABLE_PK = {
-    "tb_clientes":      "codigo_cliente_omie",
-    "tb_produtos":      "codigo_produto",
-    "tb_vendedores":    "codigo",
-    "tb_pedidos":       "codigo_pedido",
+    "tb_clientes":   "codigo_cliente_omie",
+    "tb_produtos":   "codigo_produto",
+    "tb_vendedores": "codigo",
 }
 
-# ── Renomeio de colunas antes de persistir (camelCase → snake_case) ───────
+# ── Renomeio de colunas antes de persistir ────────────────────────────────
 _COLUMN_RENAME = {
     "tb_produtos": {
-        "tipoItem":"tipo_item",
-    }
+        "tipoItem": "tipo_item",
+    },
+    "tb_pedidos": {
+        "numero_pedido":               "numped",
+        "codigo_cliente":              "codcli",
+        "data_previsao":               "datprev",
+        "codigo_produto":              "codpro",
+        "quantidade":                  "qtd",
+        "codigo_categoria_item":       "codcatitem",
+        "codigo_cenario_impostos_item":"codimposto",
+        "codVend":                     "codvend",
+        "dInc":                        "dinc",
+        "hInc":                        "hinc",
+    },
 }
 
 
 # ── Utilitários ───────────────────────────────────────────────────────────
 
 def _create_table_if_not_exists(conn, table: str) -> None:
-    """Executa o DDL do arquivo sql/<table>.sql, se existir."""
+
     sql_path = _SQL_DIR / f"{table}.sql"
     if not sql_path.exists():
         logger.warning("DDL não encontrado para '%s' em %s — tabela não será criada", table, _SQL_DIR)
@@ -55,7 +68,6 @@ def _create_table_if_not_exists(conn, table: str) -> None:
 
 
 def _serialize_complex_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """Converte colunas com list/dict para JSON string (compatível com TEXT/JSONB no PG)."""
     df = df.copy()
     for col in df.columns:
         if df[col].dtype == object:
@@ -123,31 +135,41 @@ def _upsert_dimensao(conn, df: pd.DataFrame, table: str, pk_col: str) -> None:
     logger.info("%s: %d registro(s) upserted (PK: %s)", table, len(df), pk_col)
 
 
-def _delete_insert_pedidos_itens(conn, df: pd.DataFrame) -> None:
+def _load_pedidos(conn, df: pd.DataFrame) -> None:
+    """
+    Estratégia idêntica ao tb_fatos do Baschirotto:
+      1. DELETE FROM tb_pedidos WHERE datprev BETWEEN :min AND :max
+      2. COPY (bulk insert) dos registros do período
 
+    Isso garante idempotência: re-rodar o mesmo período sobrescreve corretamente.
+    A tabela NÃO tem PK intencional — um pedido pode ter vários itens (codpro).
+    """
     df = _serialize_complex_cols(df)
     df = _fix_float_integers(df)
-    table = "tb_pedidos_itens"
+    table = "tb_pedidos"
 
-    pedido_ids = df["codigo_pedido"].dropna().unique().tolist()
-    if not pedido_ids:
-        logger.warning("tb_pedidos_itens: nenhum codigo_pedido válido — abortando.")
+    datas = pd.to_datetime(df["datprev"], errors="coerce").dropna()
+    if datas.empty:
+        logger.warning("tb_pedidos: nenhuma data válida em datprev — abortando.")
         return
+
+    data_min = datas.min().date()
+    data_max = datas.max().date()
 
     cols   = df.columns.tolist()
     cols_q = ", ".join(f'"{c}"' for c in cols)
     copy_sql   = f'COPY {table} ({cols_q}) FROM STDIN WITH (FORMAT CSV, NULL \'\')'
-    delete_sql = f'DELETE FROM {table} WHERE codigo_pedido = ANY(%s)'
+    delete_sql = f'DELETE FROM {table} WHERE datprev BETWEEN %s AND %s'
 
     with conn.cursor() as cur:
-        cur.execute(delete_sql, (pedido_ids,))
+        cur.execute(delete_sql, (data_min, data_max))
         deleted = cur.rowcount
         cur.copy_expert(copy_sql, _to_csv_buffer(df))
 
     conn.commit()
     logger.info(
-        "tb_pedidos_itens: %d item(ns) deletado(s), %d inserido(s) — %d pedido(s)",
-        deleted, len(df), len(pedido_ids),
+        "tb_pedidos: %d registro(s) deletado(s), %d inserido(s) — período %s → %s",
+        deleted, len(df), data_min, data_max,
     )
 
 
@@ -162,8 +184,8 @@ def process_table(table: str, df: pd.DataFrame) -> None:
     try:
         _create_table_if_not_exists(conn, table)
 
-        if table == "tb_pedidos_itens":
-            _delete_insert_pedidos_itens(conn, df)
+        if table == "tb_pedidos":
+            _load_pedidos(conn, df)
         else:
             if table not in _TABLE_PK:
                 raise ValueError(f"Tabela '{table}' não está mapeada em _TABLE_PK")
@@ -175,22 +197,3 @@ def process_table(table: str, df: pd.DataFrame) -> None:
         raise
     finally:
         conn.close()
-
-
-# ── Funções públicas por entidade ─────────────────────────────────────────
-
-def load_clientes(df: pd.DataFrame) -> None:
-    process_table("tb_clientes", df)
-
-
-def load_produtos(df: pd.DataFrame) -> None:
-    process_table("tb_produtos", df)
-
-
-def load_vendedores(df: pd.DataFrame) -> None:
-    process_table("tb_vendedores", df)
-
-
-def load_pedidos(df_cabecalho: pd.DataFrame, df_itens: pd.DataFrame) -> None:
-    process_table("tb_pedidos", df_cabecalho)
-    process_table("tb_pedidos_itens", df_itens)

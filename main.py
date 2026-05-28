@@ -1,7 +1,5 @@
 # %%
 import logging
-import pandas as pd
-from datetime import datetime
 
 from src.pipelines.extract import (
     ClientesPipeline,
@@ -15,12 +13,7 @@ from src.pipelines.transform import (
     load_json_produtos,
     load_json_vendedores,
 )
-from src.pipelines.load import (
-    load_clientes,
-    load_pedidos,
-    load_produtos,
-    load_vendedores,
-)
+from src.pipelines.load import process_table
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,11 +34,7 @@ def executar_pipeline(nome, pipeline, transformer=None, loader=None, **kwargs):
         result = transformer(data)
 
     if loader and result is not None:
-        # load_pedidos recebe (df_cabecalho, df_itens)
-        if isinstance(result, tuple):
-            loader(*result)
-        else:
-            loader(result)
+        loader(result)
 
     logging.info("── Pipeline %s finalizado ──\n", nome)
     return result
@@ -58,34 +47,37 @@ df_clientes = executar_pipeline(
     "clientes",
     ClientesPipeline,
     transformer=load_json_cliente,
-    loader=load_clientes,
+    loader=lambda df: process_table("tb_clientes", df),
 )
 # %%
 df_produtos = executar_pipeline(
     "produtos",
     ProdutosPipeline,
     transformer=load_json_produtos,
-    loader=load_produtos
+    loader=lambda df: process_table("tb_produtos", df),
 )
-#%%
+# %%
 df_vendedores = executar_pipeline(
     "vendedores",
     VendedoresPipeline,
     transformer=load_json_vendedores,
-    loader=load_vendedores
+    loader=lambda df: process_table("tb_vendedores", df),
 )
 # %%
 # ── Pedidos (informe o período desejado) ──────────────────────────────────
 
-DATA_INICIO = "01/01/2025"
-DATA_FIM    = datetime.today().strftime("%d/%m/%Y")
+DATA_INICIO = "01/01/2026"
+DATA_FIM    = "31/01/2026"
 
 pedidos_result = executar_pipeline(
     "pedidos",
     PedidosPipeline,
     transformer=load_json_pedidos,
-    loader=load_pedidos,
+    loader=lambda df: process_table("tb_pedidos", df),
     data_inicio=DATA_INICIO,
     data_fim=DATA_FIM,
 )
 
+# %%
+pedidos_result.head()
+# %%

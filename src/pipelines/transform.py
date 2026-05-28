@@ -122,62 +122,112 @@ def load_json_vendedores(data: list) -> pd.DataFrame:
 
 # ── Pedidos ───────────────────────────────────────────────────────────────
 
-def load_json_pedidos(data: list) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Transforma a lista bruta de pedidos em dois DataFrames:
-      - df_cabecalho : um registro por pedido (→ tb_pedidos)
-      - df_itens     : um registro por item de pedido (→ tb_pedidos_itens)
+def load_json_pedidos(data: list) -> pd.DataFrame:
 
-    Retorna (df_cabecalho, df_itens).
-    """
-    logging.info("Processando dados de pedidos (%d registros)", len(data))
+    logging.info("Processando pedidos (%d registros)", len(data))
 
-    cabecalhos = []
-    itens = []
+    rows = []
 
     for pedido in data:
-        cab  = pedido.get("cabecalho", {})
+
+        # ── níveis principais ─────────────────────────────
+        cab = pedido.get("cabecalho", {})
+        info = pedido.get("infoCadastro", {})
+        info_add = pedido.get("informacoes_adicionais", {})
+
+        # lista de itens
         dets = pedido.get("det", [])
 
-        cabecalhos.append({
-            "codigo_pedido":            cab.get("codigo_pedido"),
-            "codigo_pedido_integracao": cab.get("codigo_pedido_integracao"),
-            "data_previsao":            _parse_date_br(cab.get("data_previsao")),
-            "codigo_cliente":           cab.get("codigo_cliente"),
-            "codigo_vendedor":          cab.get("codigo_vendedor"),
-            "etapa":                    cab.get("etapa"),
-            "valor_total_pedido":       cab.get("valor_total_pedido"),
-            "qtde_parcelas":            cab.get("qtde_parcelas"),
-        })
+        for det in dets:
 
-        for num, det in enumerate(dets, start=1):
-            prod = det.get("produto", {})
-            itens.append({
-                "codigo_pedido":     cab.get("codigo_pedido"),
-                "item_num":          num,
-                "codigo_produto":    prod.get("codigo_produto"),
-                "descricao_produto": prod.get("descricao"),
-                "quantidade":        prod.get("quantidade"),
-                "valor_unitario":    prod.get("valor_unitario"),
-                "valor_total_item":  prod.get("valor_total"),
+            produto = det.get("produto", {})
+            inf_adic = det.get("inf_adic", {})
+
+            rows.append({
+
+                # ── cabeçalho ───────────────────────────
+                "codigo_cliente": cab.get("codigo_cliente"),
+                "data_previsao": cab.get("data_previsao"),
+                "numero_pedido": cab.get("numero_pedido"),
+
+                # ── produto ─────────────────────────────
+                "cfop": produto.get("cfop"),
+                "codigo_produto": produto.get("codigo_produto"),
+                "quantidade": produto.get("quantidade"),
+                "valor_deducao": produto.get("valor_deducao"),
+                "valor_desconto": produto.get("valor_desconto"),
+                "valor_icms_desonerado": produto.get("valor_icms_desonerado"),
+                "valor_mercadoria": produto.get("valor_mercadoria"),
+                "valor_total": produto.get("valor_total"),
+                "valor_unitario": produto.get("valor_unitario"),
+
+                # ── informações adicionais ──────────────
+                "codVend": info_add.get("codVend"),
+                "codigo_categoria": info_add.get("codigo_categoria"),
+
+                # ── info cadastro ───────────────────────
+                "cancelado": info.get("cancelado"),
+                "devolvido": info.get("devolvido"),
+                "dInc": info.get("dInc"),
+                "faturado": info.get("faturado"),
+                "hInc": info.get("hInc"),
+
+                # ── info item ───────────────────────────
+                "codigo_categoria_item": inf_adic.get("codigo_categoria_item"),
+                "codigo_cenario_impostos_item": inf_adic.get("codigo_cenario_impostos_item"),
             })
 
-    df_cabecalho = pd.DataFrame(cabecalhos)
-    df_itens     = pd.DataFrame(itens)
+    # ── DataFrame ───────────────────────────────────────
+    df = pd.DataFrame(rows)
+
+    # ── Conversão de tipos ──────────────────────────────
+    df["data_previsao"] = pd.to_datetime(
+        df["data_previsao"],
+        format="%d/%m/%Y",
+        errors="coerce"
+    )
+
+    df["dInc"] = pd.to_datetime(
+        df["dInc"],
+        format="%d/%m/%Y",
+        errors="coerce"
+    )
+
+    numeric_cols = [
+        "valor_unitario",
+        "quantidade",
+        "valor_total",
+        "valor_mercadoria"
+    ]
+
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # ── filtros ─────────────────────────────────────────
+
+    # filtro cenário impostos
+    df = df[
+        df["codigo_cenario_impostos_item"].isin([
+            "3883521325",
+            "4150250660"
+        ])
+    ]
+
+    # remove cliente
+    df = df[
+        df["codigo_cliente"].astype(str) != "3955092831"
+    ]
+
+    # remove devolvidos/cancelados/faturados
+    df = df[
+        (df["devolvido"] == "N") &
+        (df["cancelado"] == "N") &
+        (df["faturado"] == "N")
+    ]
 
     logging.info(
-        "Pedidos processados: %d cabeçalhos, %d itens",
-        len(df_cabecalho), len(df_itens),
+        "Pedidos processados: %d linhas, %d colunas",
+        *df.shape
     )
-    return df_cabecalho, df_itens
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────
-
-def _parse_date_br(date_str: str | None):
-    if not date_str:
-        return None
-    try:
-        return pd.to_datetime(date_str, dayfirst=True).date()
-    except Exception:
-        return None
+    return df

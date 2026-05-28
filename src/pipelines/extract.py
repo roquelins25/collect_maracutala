@@ -49,7 +49,8 @@ class VendedoresPipeline:
         collector = OmieBase(
             call="ListarVendedores",
             endpoint="geral/vendedores/",
-            response_key="cadastro"
+            response_key="cadastro",
+            extra_params={"apenas_importado_api": "N"}
         )
 
         return collector.coletar_dados()
