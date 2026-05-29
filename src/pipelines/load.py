@@ -22,9 +22,6 @@ logger = logging.getLogger(__name__)
 # load.py está em  src/pipelines/  →  ../..  é a raiz do projeto
 _SQL_DIR = Path(__file__).resolve().parent.parent.parent / "sql"
 
-# ── Chave primária de cada tabela dimensão ────────────────────────────────
-# Atenção: o nome aqui deve ser o nome APÓS aplicar _COLUMN_RENAME
-# tb_pedidos NÃO tem PK — usa DELETE por datprev + INSERT (padrão fatos)
 _TABLE_PK = {
     "tb_clientes":   "codigo_cliente_omie",
     "tb_produtos":   "codigo_produto",
@@ -135,22 +132,16 @@ def _upsert_dimensao(conn, df: pd.DataFrame, table: str, pk_col: str) -> None:
     logger.info("%s: %d registro(s) upserted (PK: %s)", table, len(df), pk_col)
 
 
-def _load_pedidos(conn, df: pd.DataFrame) -> None:
-    """
-    Estratégia idêntica ao tb_fatos do Baschirotto:
-      1. DELETE FROM tb_pedidos WHERE datprev BETWEEN :min AND :max
-      2. COPY (bulk insert) dos registros do período
-
-    Isso garante idempotência: re-rodar o mesmo período sobrescreve corretamente.
-    A tabela NÃO tem PK intencional — um pedido pode ter vários itens (codpro).
-    """
+def _load_pedidos(conn, name, df: pd.DataFrame) -> None:
     df = _serialize_complex_cols(df)
     df = _fix_float_integers(df)
-    table = "tb_pedidos"
 
-    datas = pd.to_datetime(df["datprev"], errors="coerce").dropna()
+    datas_name = { "tb_pedidos": "datprev", "tb_nf": "data_emissao" }
+    date_col = datas_name[name]
+    datas = pd.to_datetime(df[date_col], errors="coerce").dropna()
+
     if datas.empty:
-        logger.warning("tb_pedidos: nenhuma data válida em datprev — abortando.")
+        logger.warning("%s: nenhuma data válida em %s — abortando.", name, date_col)
         return
 
     data_min = datas.min().date()
@@ -158,8 +149,8 @@ def _load_pedidos(conn, df: pd.DataFrame) -> None:
 
     cols   = df.columns.tolist()
     cols_q = ", ".join(f'"{c}"' for c in cols)
-    copy_sql   = f'COPY {table} ({cols_q}) FROM STDIN WITH (FORMAT CSV, NULL \'\')'
-    delete_sql = f'DELETE FROM {table} WHERE datprev BETWEEN %s AND %s'
+    copy_sql   = f'COPY {name} ({cols_q}) FROM STDIN WITH (FORMAT CSV, NULL \'\')'
+    delete_sql = f'DELETE FROM {name} WHERE "{date_col}" BETWEEN %s AND %s'
 
     with conn.cursor() as cur:
         cur.execute(delete_sql, (data_min, data_max))
@@ -168,8 +159,8 @@ def _load_pedidos(conn, df: pd.DataFrame) -> None:
 
     conn.commit()
     logger.info(
-        "tb_pedidos: %d registro(s) deletado(s), %d inserido(s) — período %s → %s",
-        deleted, len(df), data_min, data_max,
+        "%s: %d registro(s) deletado(s), %d inserido(s) — período %s → %s",
+        name, deleted, len(df), data_min, data_max,
     )
 
 
@@ -184,8 +175,8 @@ def process_table(table: str, df: pd.DataFrame) -> None:
     try:
         _create_table_if_not_exists(conn, table)
 
-        if table == "tb_pedidos":
-            _load_pedidos(conn, df)
+        if table in ["tb_pedidos", "tb_nf"]:
+            _load_pedidos(conn, table, df)
         else:
             if table not in _TABLE_PK:
                 raise ValueError(f"Tabela '{table}' não está mapeada em _TABLE_PK")
@@ -197,3 +188,21 @@ def process_table(table: str, df: pd.DataFrame) -> None:
         raise
     finally:
         conn.close()
+
+
+# ── Funções de conveniência por tabela ────────────────────────────────────
+
+def load_clientes(df: pd.DataFrame) -> None:
+    process_table("tb_clientes", df)
+
+def load_produtos(df: pd.DataFrame) -> None:
+    process_table("tb_produtos", df)
+
+def load_vendedores(df: pd.DataFrame) -> None:
+    process_table("tb_vendedores", df)
+
+def load_pedidos(df: pd.DataFrame) -> None:
+    process_table("tb_pedidos", df)
+
+def load_nf(df: pd.DataFrame) -> None:
+    process_table("tb_nf", df)

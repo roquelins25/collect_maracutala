@@ -54,4 +54,26 @@ class VendedoresPipeline:
         )
 
         return collector.coletar_dados()
+
+class NotaFiscalPipeline:
+    def run(self, data_inicio=None, data_fim=None):
+        if not data_inicio or not data_fim:
+            raise ValueError("Informe data_inicio e data_fim")
+        
+        print(f"Coletando nota fiscal de {data_inicio} a {data_fim}...")
+
+        collector = OmieBase(
+            call="ListarNF",
+            endpoint="produtos/nfconsultar/",
+            response_key="nfCadastro",
+            extra_params={
+                "filtrar_por_status": "N",
+                "tpAmb": "1",
+                "dEmiInicial": data_inicio,
+                "dEmiFinal": data_fim,
+                "cDetalhesPedido": "S"
+            }
+        )
+
+        return collector.coletar_dados()  
     

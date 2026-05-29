@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS tb_nf (
+    chave_nfe           VARCHAR(255),
+    codigo_categoria    VARCHAR(255),
+    codigo_item         VARCHAR(255),
+    codigo_produto      VARCHAR(255),
+    cfop                VARCHAR(255),
+    denegada            VARCHAR(10),
+    data_cancelamento   DATE,
+    data_emissao        DATE,
+    finalidade_nfe      VARCHAR(255),
+    numero_nf           VARCHAR(255) NOT NULL,
+    tipo_nf             VARCHAR(10),
+    codigo_cliente      BIGINT,
+    devolvido           VARCHAR(10),
+    numero_pedido       VARCHAR(255),
+    codigo_vendedor     BIGINT,
+    operacao_pedido     VARCHAR(255),
+    quantidade          DECIMAL(10, 2),
+    valor_produto       DECIMAL(10, 2),
+    valor_total_item    DECIMAL(10, 2),
+    valor_nf            DECIMAL(10, 2)
+);

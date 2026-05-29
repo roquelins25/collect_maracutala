@@ -231,3 +231,126 @@ def load_json_pedidos(data: list) -> pd.DataFrame:
     )
 
     return df
+
+
+
+def load_json_notas_fiscais(data: list) -> pd.DataFrame:
+
+    logging.info(
+        "Processando notas fiscais (%d registros)",
+        len(data)
+    )
+
+    rows = []
+
+    for nf in data:
+
+        # ── níveis principais ─────────────────────────────
+        compl = nf.get("compl", {})
+        ide = nf.get("ide", {})
+        dest = nf.get("nfDestInt", {})
+        pedido = nf.get("pedido", {})
+        total = nf.get("total", {})
+
+        icms_tot = total.get("ICMSTot", {})
+
+        dets = nf.get("det", [])
+
+        for det in dets:
+
+            nf_prod = det.get("nfProdInt", {})
+            prod = det.get("prod", {})
+
+            rows.append({
+
+                # ── compl ───────────────────────────────
+                "chave_nfe": compl.get("cChaveNFe"),
+                "codigo_categoria": compl.get("cCodCateg"),
+
+                # ── produto integração ──────────────────
+                "codigo_item": nf_prod.get("nCodItem"),
+                "codigo_produto": nf_prod.get("nCodProd"),
+
+                # ── produto ─────────────────────────────
+                "cfop": prod.get("CFOP"),
+                "quantidade": prod.get("qCom"),
+                "valor_produto": prod.get("vProd"),
+                "valor_total_item": prod.get("vTotItem"),
+
+                # ── ide ─────────────────────────────────
+                "denegada": ide.get("cDeneg"),
+                "data_cancelamento": ide.get("dCan"),
+                "data_emissao": ide.get("dEmi"),
+                "finalidade_nfe": ide.get("finNFe"),
+                "numero_nf": ide.get("nNF"),
+                "tipo_nf": ide.get("tpNF"),
+
+                # ── destinatário ───────────────────────
+                "codigo_cliente": dest.get("nCodCli"),
+
+                # ── pedido ─────────────────────────────
+                "devolvido": pedido.get("cDevolvido"),
+                "numero_pedido": pedido.get("cNumPedido"),
+                "codigo_vendedor": pedido.get("nIdVendedor"),
+                "operacao_pedido": pedido.get("opPedido"),
+
+                # ── total ──────────────────────────────
+                "valor_nf": icms_tot.get("vNF")
+            })
+
+    # ── dataframe ───────────────────────────────────────
+    df = pd.DataFrame(rows)
+
+    # ── conversões ──────────────────────────────────────
+
+    # datas
+    date_cols = [
+        "data_emissao",
+        "data_cancelamento"
+    ]
+
+    for col in date_cols:
+
+        df[col] = pd.to_datetime(
+            df[col],
+            format="%d/%m/%Y",
+            errors="coerce"
+        )
+
+    # numéricos
+    numeric_cols = [
+        "quantidade",
+        "valor_produto",
+        "valor_total_item",
+        "valor_nf",
+        "codigo_item",
+        "codigo_produto",
+        "codigo_cliente",
+        "codigo_vendedor"
+    ]
+
+    for col in numeric_cols:
+
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+    # ── filtros ─────────────────────────────────────────
+
+    # somente saída
+    df = df[
+        df["tipo_nf"] == "1"
+    ]
+
+    # remove devolvidos
+    df = df[
+        df["devolvido"] == "N"
+    ]
+
+    logging.info(
+        "Notas fiscais processadas: %d linhas, %d colunas",
+        *df.shape
+    )
+
+    return df

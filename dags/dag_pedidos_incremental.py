@@ -8,9 +8,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.pipelines.extract import PedidosPipeline
-from src.pipelines.transform import load_json_pedidos
-from src.pipelines.load import load_pedidos
+from src.pipelines.extract import PedidosPipeline, NotaFiscalPipeline
+from src.pipelines.transform import load_json_pedidos, load_json_notas_fiscais
+from src.pipelines.load import load_pedidos, load_nf
 
 # ── Configurações ─────────────────────────────────────────────────────────
 
@@ -29,18 +29,23 @@ _DEFAULT_ARGS = {
 # ── Callable ──────────────────────────────────────────────────────────────
 
 def _run_pedidos_incremental() -> None:
-    """
-    Coleta pedidos dos últimos _JANELA_DIAS dias.
-    O transform já filtra devolvidos/cancelados/faturados, por isso
-    o DELETE + INSERT mantém a tabela sempre com o estado atual dos pedidos abertos.
-    """
-    hoje       = date.today()
+    hoje        = date.today()
     data_inicio = (hoje - timedelta(days=_JANELA_DIAS)).strftime("%d/%m/%Y")
     data_fim    = hoje.strftime("%d/%m/%Y")
 
     data = PedidosPipeline().run(data_inicio=data_inicio, data_fim=data_fim)
     df   = load_json_pedidos(data)
     load_pedidos(df)
+
+
+def _run_nf_incremental() -> None:
+    hoje        = date.today()
+    data_inicio = (hoje - timedelta(days=_JANELA_DIAS)).strftime("%d/%m/%Y")
+    data_fim    = hoje.strftime("%d/%m/%Y")
+
+    data = NotaFiscalPipeline().run(data_inicio=data_inicio, data_fim=data_fim)
+    df   = load_json_notas_fiscais(data)
+    load_nf(df)
 
 
 # ── DAG ───────────────────────────────────────────────────────────────────
@@ -55,7 +60,14 @@ with DAG(
     tags=["maracutala", "pedidos", "incremental"],
 ) as dag:
 
-    PythonOperator(
+    op_pedidos = PythonOperator(
         task_id=f"pedidos_ultimos_{_JANELA_DIAS}_dias",
         python_callable=_run_pedidos_incremental,
     )
+
+    op_nf = PythonOperator(
+        task_id=f"nf_ultimos_{_JANELA_DIAS}_dias",
+        python_callable=_run_nf_incremental,
+    )
+
+    op_pedidos >> op_nf
