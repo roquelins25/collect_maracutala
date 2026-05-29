@@ -10,9 +10,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.pipelines.extract import PedidosPipeline
-from src.pipelines.transform import load_json_pedidos
-from src.pipelines.load import load_pedidos
+from src.pipelines.extract import PedidosPipeline, NotaFiscalPipeline
+from src.pipelines.transform import load_json_pedidos, load_json_notas_fiscais
+from src.pipelines.load import load_pedidos, load_nf
 
 # ── Configurações ─────────────────────────────────────────────────────────
 
@@ -57,6 +57,12 @@ def _run_pedidos_mes(data_inicio: str, data_fim: str) -> None:
     load_pedidos(df)
     time.sleep(_RATE_LIMIT_SLEEP)  # respeita rate-limit da API Omie
 
+def _run_nf_mes(data_inicio: str, data_fim: str) -> None:
+    """Coleta, transforma e persiste notas fiscais de um mês específico."""
+    data = NotaFiscalPipeline().run(data_inicio=data_inicio, data_fim=data_fim)
+    df   = load_json_notas_fiscais(data)
+    load_nf(df)
+    time.sleep(_RATE_LIMIT_SLEEP)  # respeita rate-limit da API Omie
 
 # ── DAG ───────────────────────────────────────────────────────────────────
 
@@ -69,17 +75,22 @@ with DAG(
     catchup=False,
     tags=["maracutala", "pedidos", "historico"],
 ) as dag:
-
-    tasks = []
-    hoje  = date.today()
+    chain: list = []
+    hoje = date.today()
 
     for data_ini, data_fim, label in _gerar_meses(_HISTORICO_INICIO, hoje):
-        t = PythonOperator(
+        t_ped = PythonOperator(
             task_id=f"pedidos_{label}",
             python_callable=_run_pedidos_mes,
             op_kwargs={"data_inicio": data_ini, "data_fim": data_fim},
         )
-        # Cadeia sequencial: aguarda mês anterior antes de coletar o próximo
-        if tasks:
-            tasks[-1] >> t
-        tasks.append(t)
+        t_nf = PythonOperator(
+            task_id=f"nf_{label}",
+            python_callable=_run_nf_mes,
+            op_kwargs={"data_inicio": data_ini, "data_fim": data_fim},
+        )
+
+        if chain:
+            chain[-1] >> t_ped
+        t_ped >> t_nf
+        chain.extend([t_ped, t_nf])

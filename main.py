@@ -6,12 +6,14 @@ from src.pipelines.extract import (
     PedidosPipeline,
     ProdutosPipeline,
     VendedoresPipeline,
+    NotaFiscalPipeline
 )
 from src.pipelines.transform import (
     load_json_cliente,
     load_json_pedidos,
     load_json_produtos,
     load_json_vendedores,
+    load_json_notas_fiscais
 )
 from src.pipelines.load import process_table
 
@@ -68,7 +70,7 @@ df_vendedores = executar_pipeline(
 
 DATA_INICIO = "01/01/2026"
 DATA_FIM    = "31/01/2026"
-
+# %%
 pedidos_result = executar_pipeline(
     "pedidos",
     PedidosPipeline,
@@ -79,5 +81,20 @@ pedidos_result = executar_pipeline(
 )
 
 # %%
-pedidos_result.head()
+nf_result = executar_pipeline(
+    "notas_fiscais",
+    NotaFiscalPipeline,
+    transformer=load_json_notas_fiscais,
+    loader=lambda df: process_table("tb_nf", df),
+    data_inicio=DATA_INICIO,
+    data_fim=DATA_FIM
+)
+# %%
+len(nf_result)
+# %%
+nf_result.head()
+# %%
+nf_result.info()
+# %%
+print(nf_result.columns)
 # %%
