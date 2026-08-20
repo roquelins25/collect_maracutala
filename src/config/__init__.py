@@ -1,4 +1,8 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+_ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
 
 class Settings(BaseSettings):
     API_OMIE_BASE: str
@@ -6,6 +10,6 @@ class Settings(BaseSettings):
     API_SECRET_OMIE: str
 
     class Config:
-        env_file = ".env"
+        env_file = str(_ENV_PATH)
         env_file_encoding = "utf-8"
         extra = "ignore"
